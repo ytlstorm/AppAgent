@@ -26,6 +26,8 @@ class Job:
     root_dir: str
     task: str = ""
     demo_name: str = ""
+    doc_source: str = "auto_select"
+    allow_no_docs: str = "n"
     status: str = "queued"
     started_at: float | None = None
     finished_at: float | None = None
@@ -41,11 +43,13 @@ def create_demo_name(app_name: str) -> str:
 
 
 def _script_with_args(job: Job) -> list[ScriptCommand]:
-    common_args = tuple(build_common_args(app=job.app_name, root_dir=job.root_dir))
+    common_args = list(build_common_args(app=job.app_name, root_dir=job.root_dir))
     if job.mode == "run":
-        return [ScriptCommand(script_path="scripts/task_executor.py", args=common_args)]
+        common_args.extend(["--task_desc", job.task, "--doc_source", job.doc_source, "--allow_no_docs", job.allow_no_docs])
+        return [ScriptCommand(script_path="scripts/task_executor.py", args=tuple(common_args))]
     if job.mode == "learn_auto":
-        return [ScriptCommand(script_path="scripts/self_explorer.py", args=common_args)]
+        common_args.extend(["--task_desc", job.task])
+        return [ScriptCommand(script_path="scripts/self_explorer.py", args=tuple(common_args))]
 
     step_args = ("--app", job.app_name, "--demo", job.demo_name, "--root_dir", job.root_dir)
     return [
@@ -59,8 +63,6 @@ def _run_job(job: Job) -> None:
     job.started_at = time.time()
 
     env = dict(os.environ)
-    if job.task:
-        env["APPA_TASK_HINT"] = job.task
 
     commands = _script_with_args(job)
     for command in commands:
@@ -108,7 +110,9 @@ def render_index() -> str:
 <option value='run'>部署阶段 - task execution</option>
 </select></div>
 <div class='row'><label>应用名称</label><input name='app' placeholder='例如 DeepSeek' required /></div>
-<div class='row'><label>任务描述（可选）</label><textarea name='task' rows='3' placeholder='例如：发送消息 hello'></textarea></div>
+<div class='row'><label>任务描述（autonomous / deployment 必填）</label><textarea name='task' rows='3' placeholder='例如：发送消息 hello'></textarea></div>
+<div class='row'><label>部署文档来源（仅 deployment）</label><select name='doc_source'><option value='auto_select'>交互选择（默认）</option><option value='auto'>autonomous docs</option><option value='demo'>demo docs</option><option value='none'>不使用 docs</option></select></div>
+<div class='row'><label>无 docs 时是否继续（仅 deployment）</label><select name='allow_no_docs'><option value='n'>否（默认）</option><option value='y'>是</option></select></div>
 <div class='row'><label>root_dir</label><input name='root_dir' value='./' required /></div>
 <button type='submit'>启动任务</button>
 </form>
@@ -199,12 +203,17 @@ class AppAgentHandler(BaseHTTPRequestHandler):
         app_name_raw = form.get("app", [""])[0].strip()
         root_dir = form.get("root_dir", ["./"])[0].strip() or "./"
         task = form.get("task", [""])[0].strip()
+        doc_source = form.get("doc_source", ["auto_select"])[0].strip() or "auto_select"
+        allow_no_docs = form.get("allow_no_docs", ["n"])[0].strip() or "n"
 
         if mode not in {"learn_auto", "learn_demo", "run"}:
             self._send_json({"error": "Unsupported mode."}, status=400)
             return
         if not app_name_raw:
             self._send_json({"error": "App name is required."}, status=400)
+            return
+        if mode in {"learn_auto", "run"} and not task:
+            self._send_json({"error": "Task description is required for this mode."}, status=400)
             return
 
         app_name = normalize_app_name(app_name_raw)
@@ -217,6 +226,8 @@ class AppAgentHandler(BaseHTTPRequestHandler):
             root_dir=root_dir,
             task=task,
             demo_name=create_demo_name(app_name) if mode == "learn_demo" else "",
+            doc_source=doc_source,
+            allow_no_docs=allow_no_docs,
         )
         JOBS[job_id] = job
 
