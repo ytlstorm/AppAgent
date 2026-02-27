@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import argparse
 import threading
 import time
 import uuid
@@ -228,9 +229,20 @@ class AppAgentHandler(BaseHTTPRequestHandler):
 
 def run_server(host: str = "0.0.0.0", port: int = 5000) -> None:
     server = ThreadingHTTPServer((host, port), AppAgentHandler)
-    print(f"AppAgent web UI running at http://{host}:{port}")
+    display_host = "127.0.0.1" if host == "0.0.0.0" else host
+    print(f"AppAgent web UI running at http://{display_host}:{port}")
+    if host == "0.0.0.0":
+        print("Tip: use 127.0.0.1 or localhost in your browser. 0.0.0.0 is only a bind address.")
     server.serve_forever()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="AppAgent web UI")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    parser.add_argument("--port", default=5000, type=int, help="Bind port (default: 5000)")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    run_server()
+    args = parse_args()
+    run_server(host=args.host, port=args.port)
