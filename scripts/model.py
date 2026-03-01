@@ -62,9 +62,10 @@ class OpenAIModel(BaseModel):
             usage = response["usage"]
             prompt_tokens = usage["prompt_tokens"]
             completion_tokens = usage["completion_tokens"]
-            print_with_color(f"Request cost is "
-                             f"${'{0:.2f}'.format(prompt_tokens / 1000 * 0.01 + completion_tokens / 1000 * 0.03)}",
-                             "yellow")
+            print_with_color(
+                f"Request cost is ${'{0:.2f}'.format(prompt_tokens / 1000 * 0.01 + completion_tokens / 1000 * 0.03)}",
+                "yellow",
+            )
         else:
             return False, response["error"]["message"]
         return True, response["choices"][0]["message"]["content"]
@@ -77,14 +78,10 @@ class QwenModel(BaseModel):
         dashscope.api_key = api_key
 
     def get_model_response(self, prompt: str, images: List[str]) -> (bool, str):
-        content = [{
-            "text": prompt
-        }]
+        content = [{"text": prompt}]
         for img in images:
             img_path = f"file://{img}"
-            content.append({
-                "image": img_path
-            })
+            content.append({"image": img_path})
         messages = [
             {
                 "role": "user",
@@ -98,12 +95,25 @@ class QwenModel(BaseModel):
             return False, response.message
 
 
+def _extract_field(rsp: str, label: str, next_labels: list[str]) -> str:
+    if next_labels:
+        escaped = [re.escape(x) for x in next_labels]
+        lookahead = "|".join(rf"^\s*{x}\s*:" for x in escaped)
+        pattern = rf"^\s*{re.escape(label)}\s*:\s*(.*?)\s*(?=(?:{lookahead})|\Z)"
+    else:
+        pattern = rf"^\s*{re.escape(label)}\s*:\s*(.*?)\s*\Z"
+    matched = re.search(pattern, rsp, flags=re.MULTILINE | re.DOTALL)
+    if not matched:
+        raise ValueError(f"Missing field: {label}")
+    return matched.group(1).strip()
+
+
 def parse_explore_rsp(rsp):
     try:
-        observation = re.findall(r"Observation: (.*?)$", rsp, re.MULTILINE)[0]
-        think = re.findall(r"Thought: (.*?)$", rsp, re.MULTILINE)[0]
-        act = re.findall(r"Action: (.*?)$", rsp, re.MULTILINE)[0]
-        last_act = re.findall(r"Summary: (.*?)$", rsp, re.MULTILINE)[0]
+        observation = _extract_field(rsp, "Observation", ["Thought", "Action", "Summary"])
+        think = _extract_field(rsp, "Thought", ["Action", "Summary"])
+        act = _extract_field(rsp, "Action", ["Summary"])
+        last_act = _extract_field(rsp, "Summary", [])
         print_with_color("Observation:", "yellow")
         print_with_color(observation, "magenta")
         print_with_color("Thought:", "yellow")
@@ -144,10 +154,10 @@ def parse_explore_rsp(rsp):
 
 def parse_grid_rsp(rsp):
     try:
-        observation = re.findall(r"Observation: (.*?)$", rsp, re.MULTILINE)[0]
-        think = re.findall(r"Thought: (.*?)$", rsp, re.MULTILINE)[0]
-        act = re.findall(r"Action: (.*?)$", rsp, re.MULTILINE)[0]
-        last_act = re.findall(r"Summary: (.*?)$", rsp, re.MULTILINE)[0]
+        observation = _extract_field(rsp, "Observation", ["Thought", "Action", "Summary"])
+        think = _extract_field(rsp, "Thought", ["Action", "Summary"])
+        act = _extract_field(rsp, "Action", ["Summary"])
+        last_act = _extract_field(rsp, "Summary", [])
         print_with_color("Observation:", "yellow")
         print_with_color(observation, "magenta")
         print_with_color("Thought:", "yellow")
@@ -189,8 +199,8 @@ def parse_grid_rsp(rsp):
 
 def parse_reflect_rsp(rsp):
     try:
-        decision = re.findall(r"Decision: (.*?)$", rsp, re.MULTILINE)[0]
-        think = re.findall(r"Thought: (.*?)$", rsp, re.MULTILINE)[0]
+        decision = _extract_field(rsp, "Decision", ["Thought", "Documentation"])
+        think = _extract_field(rsp, "Thought", ["Documentation"])
         print_with_color("Decision:", "yellow")
         print_with_color(decision, "magenta")
         print_with_color("Thought:", "yellow")
@@ -198,7 +208,7 @@ def parse_reflect_rsp(rsp):
         if decision == "INEFFECTIVE":
             return [decision, think]
         elif decision == "BACK" or decision == "CONTINUE" or decision == "SUCCESS":
-            doc = re.findall(r"Documentation: (.*?)$", rsp, re.MULTILINE)[0]
+            doc = _extract_field(rsp, "Documentation", [])
             print_with_color("Documentation:", "yellow")
             print_with_color(doc, "magenta")
             return [decision, think, doc]

@@ -17,6 +17,8 @@ arg_desc = "AppAgent - Autonomous Exploration"
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=arg_desc)
 parser.add_argument("--app")
 parser.add_argument("--root_dir", default="./")
+parser.add_argument("--task_desc")
+parser.add_argument("--device")
 args = vars(parser.parse_args())
 
 configs = load_config()
@@ -71,7 +73,7 @@ if len(device_list) == 1:
     print_with_color(f"Device selected: {device}", "yellow")
 else:
     print_with_color("Please choose the Android device to start demo by entering its ID:", "blue")
-    device = input()
+    device = args.get("device") or input()
 controller = AndroidController(device)
 width, height = controller.get_device_size()
 if not width and not height:
@@ -80,7 +82,7 @@ if not width and not height:
 print_with_color(f"Screen resolution of {device}: {width}x{height}", "yellow")
 
 print_with_color("Please enter the description of the task you want me to complete in a few sentences:", "blue")
-task_desc = input()
+task_desc = args.get("task_desc") or input()
 
 round_count = 0
 doc_count = 0

@@ -17,6 +17,10 @@ arg_desc = "AppAgent Executor"
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=arg_desc)
 parser.add_argument("--app")
 parser.add_argument("--root_dir", default="./")
+parser.add_argument("--task_desc")
+parser.add_argument("--device")
+parser.add_argument("--doc_source", choices=["auto", "demo", "none", "auto_select"], default="auto_select")
+parser.add_argument("--allow_no_docs", choices=["y", "n"], default="n")
 args = vars(parser.parse_args())
 
 configs = load_config()
@@ -54,11 +58,13 @@ task_dir = os.path.join(work_dir, dir_name)
 os.mkdir(task_dir)
 log_path = os.path.join(task_dir, f"log_{app}_{dir_name}.txt")
 
+doc_source = args.get("doc_source", "auto_select")
+allow_no_docs = args.get("allow_no_docs", "n")
 no_doc = False
 if not os.path.exists(auto_docs_dir) and not os.path.exists(demo_docs_dir):
     print_with_color(f"No documentations found for the app {app}. Do you want to proceed with no docs? Enter y or n",
                      "red")
-    user_input = ""
+    user_input = allow_no_docs
     while user_input != "y" and user_input != "n":
         user_input = input().lower()
     if user_input == "y":
@@ -66,17 +72,24 @@ if not os.path.exists(auto_docs_dir) and not os.path.exists(demo_docs_dir):
     else:
         sys.exit()
 elif os.path.exists(auto_docs_dir) and os.path.exists(demo_docs_dir):
-    print_with_color(f"The app {app} has documentations generated from both autonomous exploration and human "
-                     f"demonstration. Which one do you want to use? Type 1 or 2.\n1. Autonomous exploration\n2. Human "
-                     f"Demonstration",
-                     "blue")
-    user_input = ""
-    while user_input != "1" and user_input != "2":
-        user_input = input()
-    if user_input == "1":
+    if doc_source == "none":
+        no_doc = True
+    elif doc_source == "auto":
         docs_dir = auto_docs_dir
-    else:
+    elif doc_source == "demo":
         docs_dir = demo_docs_dir
+    else:
+        print_with_color(f"The app {app} has documentations generated from both autonomous exploration and human "
+                         f"demonstration. Which one do you want to use? Type 1 or 2.\n1. Autonomous exploration\n2. Human "
+                         f"Demonstration",
+                         "blue")
+        user_input = ""
+        while user_input != "1" and user_input != "2":
+            user_input = input()
+        if user_input == "1":
+            docs_dir = auto_docs_dir
+        else:
+            docs_dir = demo_docs_dir
 elif os.path.exists(auto_docs_dir):
     print_with_color(f"Documentations generated from autonomous exploration were found for the app {app}. The doc base "
                      f"is selected automatically.", "yellow")
@@ -96,7 +109,7 @@ if len(device_list) == 1:
     print_with_color(f"Device selected: {device}", "yellow")
 else:
     print_with_color("Please choose the Android device to start demo by entering its ID:", "blue")
-    device = input()
+    device = args.get("device") or input()
 controller = AndroidController(device)
 width, height = controller.get_device_size()
 if not width and not height:
@@ -105,7 +118,7 @@ if not width and not height:
 print_with_color(f"Screen resolution of {device}: {width}x{height}", "yellow")
 
 print_with_color("Please enter the description of the task you want me to complete in a few sentences:", "blue")
-task_desc = input()
+task_desc = args.get("task_desc") or input()
 
 round_count = 0
 last_act = "None"
